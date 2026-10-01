@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>紫砂壺 XRF 智能報告系統</title>
+
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- SheetJS -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- ECharts -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        navy: '#1B3A5C',
+        navyDeep: '#0F2A44',
+        navyDark: '#0B1F33',
+        gold: '#B8860B',
+        goldBright: '#D4A017',
+      },
+      fontFamily: {
+        sans: ['"Noto Sans TC"', 'system-ui', 'sans-serif'],
+      }
+    }
+  }
+}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
+
+<style>
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Noto Sans TC', sans-serif; background: #0B1F33; color: #fff; }
+  .grad-navy { background: linear-gradient(135deg, #0B1F33 0%, #1B3A5C 100%); }
+  .grad-navy-soft { background: linear-gradient(180deg, #0F2A44 0%, #1B3A5C 100%); }
+  .grad-gold { background: linear-gradient(135deg, #D4A017 0%, #B8860B 100%); }
+  .text-gradient-gold {
+    background: linear-gradient(135deg, #FFD966 0%, #D4A017 60%, #B8860B 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .card-glass {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(212,160,23,0.35);
+    backdrop-filter: blur(8px);
+    border-radius: 20px;
+  }
+  .btn-gold {
+    background: linear-gradient(135deg, #D4A017 0%, #B8860B 100%);
+    color: #0B1F33; font-weight: 700;
+    border-radius: 12px;
+    transition: all .25s ease;
+    box-shadow: 0 8px 24px rgba(212,160,23,0.25);
+    cursor: pointer;
+  }
+  .btn-gold:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(212,160,23,0.45); }
+  .btn-ghost {
+    border: 2px solid rgba(212,160,23,0.7); color: #FFD966;
+    border-radius: 12px; font-weight: 600;
+    transition: all .25s ease;
+    cursor: pointer;
+    background: transparent;
+  }
+  .btn-ghost:hover { background: rgba(212,160,23,0.12); }
+
+  .drop-zone {
+    border: 2px dashed rgba(212,160,23,0.55);
+    border-radius: 20px;
+    transition: all .3s ease;
+    background: rgba(255,255,255,0.03);
+  }
+  .drop-zone:hover, .drop-zone.active {
+    border-color: #D4A017; background: rgba(212,160,23,0.08);
+  }
+
+  .step-dot { width: 44px; height: 44px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .step-active { background: linear-gradient(135deg,#D4A017,#B8860B); color:#0B1F33; }
+  .step-done { background:#2E7D32; color:#fff; }
+  .step-idle { background: rgba(255,255,255,0.1); color:#94a3b8; }
+
+  .progress-bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.1); overflow: hidden; }
+  .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg,#D4A017,#FFD966); transition: width .4s ease; }
+
+  .fade-in { animation: fadeIn .6s ease forwards; opacity: 0; }
+  @keyframes fadeIn { to { opacity: 1; } }
+
+  .slide-up { animation: slideUp .6s ease forwards; opacity: 0; transform: translateY(16px); }
+  @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
+
+  .glass-table th { background: rgba(212,160,23,0.15); color: #FFD966; font-weight: 700; padding: 12px 16px; text-align: left; }
+  .glass-table td { padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.08); }
+
+  .badge { display:inline-flex; align-items:center; padding: 4px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+  .badge-a { background: rgba(46,125,50,0.2); color:#7CE38B; border:1px solid rgba(124,227,139,0.4); }
+  .badge-b { background: rgba(30,90,180,0.2); color:#7EB6FF; border:1px solid rgba(126,182,255,0.4); }
+  .badge-c { background: rgba(212,160,23,0.2); color:#FFD966; border:1px solid rgba(255,217,102,0.4); }
+
+  .report-section { background: rgba(255,255,255,0.04); border-radius: 16px; padding: 24px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.06); }
+  .report-section h3 { color: #FFD966; font-size: 22px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(212,160,23,0.4); border-radius: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="fixed top-0 left-0 right-0 z-50 grad-navy border-b border-gold/20">
+  <div class="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 grad-gold rounded-xl flex items-center justify-center font-black text-navyDark text-xl">壺</div>
+      <div>
+        <div class="text-white font-bold text-lg leading-tight">紫砂壺 XRF 智能報告系統</div>
+        <div class="text-xs text-goldBright/80">XRF Smart Report System for Zisha Teapots</div>
+      </div>
+    </div>
+    <div class="hidden md:flex items-center gap-8 text-sm font-medium">
+      <a href="#demo" class="text-goldBright hover:text-white transition">模擬系統</a>
+      <a href="#tech" class="text-goldBright hover:text-white transition">技術原理</a>
+      <a href="#pricing" class="text-goldBright hover:text-white transition">定價方案</a>
+      <a href="#contact" class="btn-gold px-5 py-2 text-sm">預約演示</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section class="grad-navy pt-32 pb-20 relative overflow-hidden">
+  <div class="absolute inset-0 opacity-20 pointer-events-none"
+       style="background: radial-gradient(circle at 80% 30%, #D4A017 0%, transparent 45%);"></div>
+
+  <div class="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center relative">
+    <div class="slide-up">
+      <div class="inline-flex items-center gap-2 badge badge-a mb-6">
+        <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+        基於 XRF 光譜技術 · 服務紫砂產業數字化
+      </div>
+      <h1 class="text-5xl md:text-6xl font-black leading-tight mb-6">
+        把 XRF 專業數據<br>
+        <span class="text-gradient-gold">變成可交付的紫砂報告</span>
+      </h1>
+      <p class="text-xl text-slate-300 mb-8 leading-relaxed">
+        上傳檢測數據 → 系統自動解析 → 生成標準化報告。<br>
+        我們不做檢測，我們做檢測之後的「報告軟體層」。
+      </p>
+      <div class="flex flex-wrap gap-4">
+        <a href="#demo" class="btn-gold px-8 py-4 text-lg inline-block">立即試用 Demo</a>
+        <a href="#contact" class="btn-ghost px-8 py-4 text-lg inline-block">預約產品演示</a>
+      </div>
+    </div>
+
+    <div class="slide-up" style="animation-delay:.15s">
+      <div class="card-glass p-6">
+        <div class="text-goldBright text-sm font-semibold mb-3">系統預覽</div>
+        <div class="bg-navyDark/80 rounded-2xl p-6 border border-gold/20">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-3 h-3 rounded-full bg-red-400"></div>
+            <div class="w-3 h-3 rounded-full bg-yellow-400"></div>
+            <div class="w-3 h-3 rounded-full bg-green-400"></div>
+            <div class="text-xs text-slate-400 ml-3">report_preview.pdf</div>
+          </div>
+          <div class="space-y-3">
+            <div class="text-white font-bold text-lg">紫砂壺 XRF 材料分析報告</div>
+            <div class="text-xs text-slate-400">報告編號 HJ-2026-0001</div>
+            <div class="h-px bg-gold/20 my-4"></div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-400">產地歸屬</span>
+              <span class="text-goldBright font-bold">黃龍山 87.3%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:87%"></div>
+            </div>
+            <div class="flex justify-between text-sm mt-3">
+              <span class="text-slate-400">純淨度</span>
+              <span class="text-goldBright font-bold">82%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:82%"></div>
+            </div>
+            <div class="flex justify-between text-sm mt-3">
+              <span class="text-slate-400">安全評級</span>
+              <span class="badge badge-a">✅ PASS</span>
+            </div>
+            <div class="flex justify-between text-sm mt-3">
+              <span class="text-slate-400">綜合評級</span>
+              <span class="text-2xl font-black text-goldBright">A 級</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 三個核心賣點 ============ -->
+<section class="grad-navy-soft py-20 border-y border-gold/10">
+  <div class="max-w-7xl mx-auto px-6 grid md:grid-cols-3 gap-6">
+    <div class="card-glass p-8 slide-up">
+      <div class="text-4xl mb-4">📄</div>
+      <h3 class="text-xl font-bold text-goldBright mb-3">標準化輸出</h3>
+      <p class="text-slate-300 leading-relaxed">統一公式、欄位、圖表、語言與報告版面，讓每一份報告都專業可讀。</p>
+    </div>
+    <div class="card-glass p-8 slide-up" style="animation-delay:.1s">
+      <div class="text-4xl mb-4">⚡</div>
+      <h3 class="text-xl font-bold text-goldBright mb-3">批量交付</h3>
+      <p class="text-slate-300 leading-relaxed">支援批量處理、企業模板、編號與存檔，檢測機構可規模化交付。</p>
+    </div>
+    <div class="card-glass p-8 slide-up" style="animation-delay:.2s">
+      <div class="text-4xl mb-4">🔒</div>
+      <h3 class="text-xl font-bold text-goldBright mb-3">數據壁壘</h3>
+      <p class="text-slate-300 leading-relaxed">應星開物 9000 件泥料數據庫 + 持續累積的報告案例，構成核心護城河。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 模擬系統 DEMO ============ -->
+<section id="demo" class="grad-navy py-24">
+  <div class="max-w-6xl mx-auto px-6">
+    <div class="text-center mb-14">
+      <div class="badge badge-b mb-4">模擬系統 · 互動 Demo</div>
+      <h2 class="text-4xl md:text-5xl font-black text-white mb-4">三步生成標準化報告</h2>
+      <p class="text-lg text-slate-300">上傳 XRF 數據，系統自動解析，即時生成報告預覽</p>
+    </div>
+
+    <!-- 步驟指示 -->
+    <div class="flex items-center justify-center gap-4 mb-12 flex-wrap">
+      <div class="flex items-center gap-3">
+        <div id="stepDot1" class="step-dot step-active">1</div>
+        <span class="text-sm font-semibold text-white">上傳數據</span>
+      </div>
+      <div class="w-12 h-px bg-gold/40"></div>
+      <div class="flex items-center gap-3">
+        <div id="stepDot2" class="step-dot step-idle">2</div>
+        <span class="text-sm font-semibold text-slate-400" id="stepLabel2">系統解析</span>
+      </div>
+      <div class="w-12 h-px bg-gold/40"></div>
+      <div class="flex items-center gap-3">
+        <div id="stepDot3" class="step-dot step-idle">3</div>
+        <span class="text-sm font-semibold text-slate-400" id="stepLabel3">生成報告</span>
+      </div>
+    </div>
+
+    <!-- 上傳區 -->
+    <div id="uploadSection" class="card-glass p-8 md:p-12">
+      <div id="dropZone" class="drop-zone p-12 text-center cursor-pointer">
+        <div class="text-6xl mb-4">📊</div>
+        <div class="text-2xl font-bold text-white mb-2">拖拽 Excel / CSV 到此處</div>
+        <div class="text-slate-400 mb-6">或點擊選擇文件 · 文件不會上傳服務器</div>
+        <div class="btn-gold inline-block px-6 py-3">選擇文件</div>
+        <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls,.csv" />
+      </div>
+
+      <div class="flex flex-wrap items-center justify-center gap-4 mt-6 text-sm">
+        <button onclick="downloadSampleExcel()" class="btn-gold px-5 py-2">📥 下載示例 Excel</button>
+        <button onclick="loadSample()" class="btn-ghost px-5 py-2">⚡ 一鍵載入示例</button>
+        <button onclick="toggleManual()" class="btn-ghost px-5 py-2">✏️ 手動輸入元素含量</button>
+      </div>
+
+      <!-- 手動輸入區 -->
+      <div id="manualSection" class="hidden mt-8">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div><label class="text-xs text-goldBright">SiO₂ (%)</label><input id="m_si" type="number" step="0.1" value="62.4" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-3 py-2 text-white" /></div>
+          <div><label class="text-xs text-goldBright">Al₂O₃ (%)</label><input id="m_al" type="number" step="0.1" value="22.1" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-3 py-2 text-white" /></div>
+          <div><label class="text-xs text-goldBright">Fe₂O₃ (%)</label><input id="m_fe" type="number" step="0.1" value="7.8" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-3 py-2 text-white" /></div>
+          <div><label class="text-xs text-goldBright">K₂O (%)</label><input id="m_k" type="number" step="0.1" value="2.1" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-3 py-2 text-white" /></div>
+          <div><label class="text-xs text-goldBright">CaO (%)</label><input id="m_ca" type="number" step="0.1" value="0.4" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-3 py-2 text-white" /></div>
+          <div><label class="text-xs text-goldBright">Rb (ppm)</label><input id="m_rb" type="number" step="1" value="120" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-3 py-2 text-white" /></div>
+          <div><label class="text-xs text-goldBright">Sr (ppm)</label><input id="m_sr" type="number" step="1" value="85" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-3 py-2 text-white" /></div>
+          <div class="flex items-end"><button onclick="submitManual()" class="btn-gold w-full py-2">生成報告</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 解析中 -->
+    <div id="analyzingSection" class="hidden card-glass p-8 md:p-12">
+      <div class="text-center mb-8">
+        <div class="text-5xl mb-4 animate-pulse">⚙️</div>
+        <div class="text-2xl font-bold text-white">系統正在解析…</div>
+      </div>
+      <div class="progress-bar mb-6">
+        <div id="analyzeProgress" class="progress-fill"></div>
+      </div>
+      <div class="space-y-3 text-sm">
+        <div id="task1" class="flex items-center gap-3 text-slate-400"><span>○</span> 讀取文件…</div>
+        <div id="task2" class="flex items-center gap-3 text-slate-400"><span>○</span> 識別元素欄位…</div>
+        <div id="task3" class="flex items-center gap-3 text-slate-400"><span>○</span> 計算特徵比值…</div>
+        <div id="task4" class="flex items-center gap-3 text-slate-400"><span>○</span> 比對參考數據庫…</div>
+        <div id="task5" class="flex items-center gap-3 text-slate-400"><span>○</span> 生成報告…</div>
+      </div>
+    </div>
+
+    <!-- 報告區 -->
+    <div id="reportSection" class="hidden">
+      <!-- 操作列 -->
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div class="flex items-center gap-3">
+          <div class="badge badge-a">✅ 報告生成完成</div>
+          <span class="text-sm text-slate-400">編號 HJ-<span id="reportId">2026-0001</span></span>
+        </div>
+        <div class="flex gap-3">
+          <button onclick="downloadPDF()" class="btn-gold px-5 py-2 text-sm">📄 下載 PDF</button>
+          <button onclick="resetDemo()" class="btn-ghost px-5 py-2 text-sm">↻ 重新上傳</button>
+        </div>
+      </div>
+
+      <!-- 報告主體 -->
+      <div id="reportBody" class="card-glass p-6 md:p-10">
+
+        <!-- 報告頭 -->
+        <div class="text-center mb-8 pb-6 border-b border-gold/20">
+          <div class="text-xs tracking-widest text-goldBright mb-2">HUJIAN · MACAU</div>
+          <h2 class="text-3xl md:text-4xl font-black text-white mb-2" style="font-family:'Noto Serif TC',serif;">紫砂壺 XRF 材料分析報告</h2>
+          <div class="text-sm text-slate-400">Yixing Teapot XRF Material Analysis Report</div>
+        </div>
+
+        <!-- 1 樣品資訊 -->
+        <div class="report-section">
+          <h3>📋 一、樣品資訊</h3>
+          <div class="grid md:grid-cols-2 gap-4 text-sm">
+            <div class="flex justify-between py-2 border-b border-white/5"><span class="text-slate-400">樣品編號</span><span class="text-white font-semibold" id="sampleId">HJ-2026-0001</span></div>
+            <div class="flex justify-between py-2 border-b border-white/5"><span class="text-slate-400">檢測日期</span><span class="text-white font-semibold" id="testDate">—</span></div>
+            <div class="flex justify-between py-2 border-b border-white/5"><span class="text-slate-400">壺型</span><span class="text-white font-semibold">圓器壺（文旦型）</span></div>
+            <div class="flex justify-between py-2 border-b border-white/5"><span class="text-slate-400">泥料類型</span><span class="text-white font-semibold">紫泥</span></div>
+          </div>
+        </div>
+
+        <!-- 2 元素分析 -->
+        <div class="report-section">
+          <h3>🔬 二、元素分析結果</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full glass-table text-sm">
+              <thead><tr><th>元素</th><th>含量</th><th>參考範圍</th><th>狀態</th></tr></thead>
+              <tbody id="elementTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 3 特徵比值 -->
+        <div class="report-section">
+          <h3>📐 三、特徵比值計算</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full glass-table text-sm">
+              <thead><tr><th>指標</th><th>數值</th><th>參考區間</th><th>判讀</th></tr></thead>
+              <tbody id="ratioTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 4 產地概率 -->
+        <div class="report-section">
+          <h3>🗺️ 四、產地歸屬概率</h3>
+          <div id="originChart" style="height:260px;"></div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+            <div class="text-center p-4 bg-navyDark/60 rounded-xl border border-gold/20">
+              <div class="text-xs text-slate-400 mb-1">純淨度</div>
+              <div class="text-2xl font-black text-goldBright" id="purityVal">82%</div>
+            </div>
+            <div class="text-center p-4 bg-navyDark/60 rounded-xl border border-gold/20">
+              <div class="text-xs text-slate-400 mb-1">典型性</div>
+              <div class="text-2xl font-black text-goldBright" id="typicalVal">76%</div>
+            </div>
+            <div class="text-center p-4 bg-navyDark/60 rounded-xl border border-gold/20">
+              <div class="text-xs text-slate-400 mb-1">稀缺度</div>
+              <div class="text-2xl font-black text-goldBright">★★★☆☆</div>
+            </div>
+            <div class="text-center p-4 bg-navyDark/60 rounded-xl border border-gold/20">
+              <div class="text-xs text-slate-400 mb-1">綜合評級</div>
+              <div class="text-2xl font-black text-goldBright" id="gradeVal">A 級</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5 安全評級 -->
+        <div class="report-section">
+          <h3>🛡️ 五、安全評級</h3>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div class="p-5 bg-navyDark/60 rounded-xl border border-green-500/30">
+              <div class="flex justify-between items-center mb-3">
+                <span class="text-white font-semibold">鉛（Pb）遷移量</span>
+                <span class="badge badge-a">✅ PASS</span>
+              </div>
+              <div class="flex justify-between text-sm">
+                <span class="text-slate-400">檢測結果</span>
+                <span class="text-white font-bold">0.3 mg/L</span>
+              </div>
+              <div class="flex justify-between text-xs mt-2">
+                <span class="text-slate-500">限值 ≤ 2.0 mg/L</span>
+                <span class="text-slate-500">GB/T 10816-2024</span>
+              </div>
+            </div>
+            <div class="p-5 bg-navyDark/60 rounded-xl border border-green-500/30">
+              <div class="flex justify-between items-center mb-3">
+                <span class="text-white font-semibold">鎘（Cd）遷移量</span>
+                <span class="badge badge-a">✅ PASS</span>
+              </div>
+              <div class="flex justify-between text-sm">
+                <span class="text-slate-400">檢測結果</span>
+                <span class="text-white font-bold">0.05 mg/L</span>
+              </div>
+              <div class="flex justify-between text-xs mt-2">
+                <span class="text-slate-500">限值 ≤ 0.30 mg/L</span>
+                <span class="text-slate-500">GB/T 10816-2024</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6 適茶性建議 -->
+        <div class="report-section">
+          <h3>🍵 六、適茶性建議</h3>
+          <div class="grid md:grid-cols-3 gap-4 text-sm">
+            <div class="p-4 bg-navyDark/60 rounded-xl border border-gold/20">
+              <div class="text-goldBright font-bold mb-2">紫泥</div>
+              <div class="text-slate-300">推薦：紅茶、普洱熟茶</div>
+              <div class="text-slate-500 text-xs mt-2">水溫 95–100°C · 悶泡 10–15 秒</div>
+            </div>
+            <div class="p-4 bg-navyDark/60 rounded-xl border border-gold/20">
+              <div class="text-goldBright font-bold mb-2">朱泥</div>
+              <div class="text-slate-300">推薦：烏龍茶、鐵觀音</div>
+              <div class="text-slate-500 text-xs mt-2">水溫 90–95°C · 快沖快出</div>
+            </div>
+            <div class="p-4 bg-navyDark/60 rounded-xl border border-gold/20">
+              <div class="text-goldBright font-bold mb-2">段泥</div>
+              <div class="text-slate-300">推薦：青茶類</div>
+              <div class="text-slate-500 text-xs mt-2">水溫 85–90°C · 避免深色茶</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 7 數字 DNA 通行證 -->
+        <div class="report-section" style="background:linear-gradient(135deg,rgba(184,134,11,0.15),rgba(212,160,23,0.05)); border:1px solid rgba(212,160,23,0.5);">
+          <h3>🏛️ 七、數字 DNA 通行證</h3>
+          <div class="grid md:grid-cols-2 gap-6">
+            <div>
+              <div class="text-xs tracking-widest text-goldBright mb-3">DIGITAL DNA PASSPORT</div>
+              <div class="space-y-3 text-sm">
+                <div class="flex justify-between border-b border-white/10 pb-2"><span class="text-slate-400">證書編號</span><span class="text-white font-bold" id="certId">HJ-2026-0001</span></div>
+                <div class="flex justify-between border-b border-white/10 pb-2"><span class="text-slate-400">產地等級</span><span class="text-white font-bold">宜興黃龍山 · A 級</span></div>
+                <div class="flex justify-between border-b border-white/10 pb-2"><span class="text-slate-400">元素指紋</span><span class="text-white font-bold" id="certFingerprint">Si 62.4% · Al 22.1% · Rb/Sr 1.41</span></div>
+                <div class="flex justify-between border-b border-white/10 pb-2"><span class="text-slate-400">檢測日期</span><span class="text-white font-bold" id="certDate">—</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">區塊鏈存證</span><span class="text-goldBright font-mono text-xs">待接入</span></div>
+              </div>
+            </div>
+            <div class="flex items-center justify-center">
+              <div class="text-center p-6 border-2 border-gold/40 rounded-2xl">
+                <div class="text-5xl mb-2">🔐</div>
+                <div class="text-xs text-slate-400">SCAN TO VERIFY</div>
+                <div class="text-goldBright font-bold mt-2">壺鑑·澳門</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 合規提示 -->
+        <div class="text-xs text-slate-500 text-center mt-6 pt-6 border-t border-white/10">
+          ⚠️ 本報告僅供參考，不構成鑑定結論。報告定位為材料元素分析與輔助解讀。
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 技術原理 ============ -->
+<section id="tech" class="grad-navy-soft py-24 border-y border-gold/10">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="text-center mb-14">
+      <div class="badge badge-b mb-4">技術原理</div>
+      <h2 class="text-4xl md:text-5xl font-black text-white mb-4">XRF 光譜技術 + 紫砂專業 Know-how</h2>
+      <p class="text-lg text-slate-300">四層架構，從原始數據到標準化報告</p>
+    </div>
+
+    <div class="grid md:grid-cols-4 gap-6">
+      <div class="card-glass p-6"><div class="text-goldBright text-sm mb-2">LAYER 01</div><div class="text-white font-bold text-lg mb-2">XRF Data Parser</div><div class="text-slate-400 text-sm">解析原始數據、元素濃度、譜圖與 metadata</div></div>
+      <div class="card-glass p-6"><div class="text-goldBright text-sm mb-2">LAYER 02</div><div class="text-white font-bold text-lg mb-2">Analysis Engine</div><div class="text-slate-400 text-sm">元素整理、比值計算、異常檢查與規則運算</div></div>
+      <div class="card-glass p-6"><div class="text-goldBright text-sm mb-2">LAYER 03</div><div class="text-white font-bold text-lg mb-2">Reference Engine</div><div class="text-slate-400 text-sm">比對參考樣本與合作方數據，輸出相似性結果</div></div>
+      <div class="card-glass p-6"><div class="text-goldBright text-sm mb-2">LAYER 04</div><div class="text-white font-bold text-lg mb-2">Report Engine</div><div class="text-slate-400 text-sm">產生圖表、分析文字、模板版面、編號與 PDF</div></div>
+    </div>
+
+    <div class="mt-12 grid md:grid-cols-2 gap-6">
+      <div class="card-glass p-8">
+        <h3 class="text-xl font-bold text-goldBright mb-4">合作方設備</h3>
+        <div class="text-white font-semibold mb-2">EDX 8500 EDXRF Spectrometer</div>
+        <div class="text-slate-400 text-sm mb-4">JPSPEC 佳譜儀器（蘇州）</div>
+        <ul class="space-y-2 text-sm text-slate-300">
+          <li>• 探測器：高性能矽漂移探測器（SDD）</li>
+          <li>• 元素範圍：Mg（12）～U（92）</li>
+          <li>• 能量分辨率：約 140±5 eV</li>
+          <li>• 台式機型，適合精確溯源比對</li>
+        </ul>
+      </div>
+      <div class="card-glass p-8">
+        <h3 class="text-xl font-bold text-goldBright mb-4">五項核心指標</h3>
+        <ul class="space-y-2 text-sm text-slate-300">
+          <li>① 指紋譜（元素指紋圖譜）</li>
+          <li>② 矽鋁比（SiO₂/Al₂O₃）：0.32–0.38</li>
+          <li>③ 鉀鈣比（K₂O/CaO）</li>
+          <li>④ 銣鍶比（Rb/Sr）：礦層越深越低</li>
+          <li>⑤ 鉀鈉鈣鎂協同比</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-8 text-center text-xs text-slate-500">
+      學術來源：Schipper & Hol (2025) · 徐伟轩等 (2025) · DB32/T 3498-2019 · GB/T 10816-2024 · CN117129503A
+    </div>
+  </div>
+</section>
+
+<!-- ============ 定價方案 ============ -->
+<section id="pricing" class="grad-navy py-24">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="text-center mb-14">
+      <div class="badge badge-c mb-4">定價方案</div>
+      <h2 class="text-4xl md:text-5xl font-black text-white mb-4">三種方案，滿足不同規模</h2>
+      <p class="text-lg text-slate-300">從單次試用到企業級部署</p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="card-glass p-8">
+        <div class="text-goldBright text-sm font-semibold mb-2">按份收費</div>
+        <div class="text-4xl font-black text-white mb-2">¥200<span class="text-lg text-slate-400 font-normal"> / 份</span></div>
+        <div class="text-slate-400 text-sm mb-6">適合試點與低頻客戶</div>
+        <ul class="space-y-3 text-sm text-slate-300 mb-8">
+          <li>✅ 單份報告生成</li>
+          <li>✅ PDF 導出</li>
+          <li>✅ 報告編號與 QR</li>
+          <li class="text-slate-600">— 批量處理</li>
+          <li class="text-slate-600">— 企業模板</li>
+        </ul>
+        <button class="btn-ghost w-full py-3">選擇方案</button>
+      </div>
+      <div class="card-glass p-8 border-2 border-gold relative">
+        <div class="absolute -top-3 left-1/2 -translate-x-1/2 badge badge-a">最受歡迎</div>
+        <div class="text-goldBright text-sm font-semibold mb-2">SaaS 訂閱</div>
+        <div class="text-4xl font-black text-white mb-2">¥1,500<span class="text-lg text-slate-400 font-normal"> / 月</span></div>
+        <div class="text-slate-400 text-sm mb-6">適合穩定檢測量機構</div>
+        <ul class="space-y-3 text-sm text-slate-300 mb-8">
+          <li>✅ 月費 + 50 份報告額度</li>
+          <li>✅ 批量處理</li>
+          <li>✅ 企業模板</li>
+          <li>✅ 報告編號與存檔</li>
+          <li class="text-slate-600">— 私有部署</li>
+        </ul>
+        <button class="btn-gold w-full py-3">選擇方案</button>
+      </div>
+      <div class="card-glass p-8">
+        <div class="text-goldBright text-sm font-semibold mb-2">企業版</div>
+        <div class="text-4xl font-black text-white mb-2">定制報價</div>
+        <div class="text-slate-400 text-sm mb-6">適合大型機構</div>
+        <ul class="space-y-3 text-sm text-slate-300 mb-8">
+          <li>✅ 私有部署</li>
+          <li>✅ API 串接</li>
+          <li>✅ 自訂模板</li>
+          <li>✅ 專屬客服</li>
+          <li>✅ 持續數據更新</li>
+        </ul>
+        <button class="btn-ghost w-full py-3">聯絡我們</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 聯絡我們 ============ -->
+<section id="contact" class="grad-navy-soft py-24 border-y border-gold/10">
+  <div class="max-w-3xl mx-auto px-6 text-center">
+    <div class="badge badge-c mb-4">聯絡我們</div>
+    <h2 class="text-4xl md:text-5xl font-black text-white mb-6">準備好生成第一份標準化報告了嗎？</h2>
+    <p class="text-lg text-slate-300 mb-10">留下聯絡方式，我們將在 1 個工作日內與您聯繫</p>
+    <div class="card-glass p-8">
+      <div class="grid md:grid-cols-2 gap-4 text-left">
+        <div>
+          <label class="text-xs text-goldBright">姓名</label>
+          <input type="text" placeholder="您的姓名" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-4 py-3 text-white" />
+        </div>
+        <div>
+          <label class="text-xs text-goldBright">機構</label>
+          <input type="text" placeholder="機構 / 公司名稱" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-4 py-3 text-white" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs text-goldBright">Email</label>
+          <input type="email" placeholder="your@email.com" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-4 py-3 text-white" />
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs text-goldBright">需求描述</label>
+          <textarea rows="3" placeholder="請簡述您的需求" class="w-full mt-1 bg-navyDark/60 border border-gold/30 rounded-lg px-4 py-3 text-white"></textarea>
+        </div>
+      </div>
+      <button onclick="alert('Demo 環境：已收到您的聯絡信息（此為模擬提交）')" class="btn-gold w-full py-4 text-lg mt-6">提交預約</button>
+    </div>
+
+    <div class="mt-10 flex flex-wrap items-center justify-center gap-6 text-sm text-slate-400">
+      <div>📧 contact@hujian-macau.com</div>
+      <div>📍 澳門大學鄭裕彤書院</div>
+      <div>🤝 合作方：應星開物 · 石介茶屋</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="grad-navy py-12 border-t border-gold/20">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="flex flex-col md:flex-row justify-between items-center gap-6">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 grad-gold rounded-xl flex items-center justify-center font-black text-navyDark text-xl">壺</div>
+        <div>
+          <div class="text-white font-bold">紫砂壺 XRF 智能報告系統</div>
+          <div class="text-xs text-goldBright/80">XRF Smart Report System for Zisha Teapots</div>
+        </div>
+      </div>
+      <div class="text-sm text-slate-400 text-center md:text-right">
+        <div>本系統僅作材料元素分析與輔助解讀，不構成鑑定結論。</div>
+        <div class="mt-1">© 2026 壺鑑·澳門 · 智「破」壺團隊</div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ============ JS ============ -->
+<script>
+// ============ 全域狀態 ============
+let currentData = null;
+
+// ============ 導航平滑滾動 ============
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const t = document.querySelector(a.getAttribute('href'));
+    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+
+// ============ 拖拽上傳 ============
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('active'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('active'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('active');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+// ============ 下載示例 Excel ============
+function downloadSampleExcel() {
+  const data = [
+    ['元素', '含量'],
+    ['SiO2', 62.4],
+    ['Al2O3', 22.1],
+    ['Fe2O3', 7.8],
+    ['K2O', 2.1],
+    ['CaO', 0.4],
+    ['Rb', 120],
+    ['Sr', 85]
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{ wch: 14 }, { wch: 14 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'XRF数据');
+  XLSX.writeFile(wb, 'XRF_sample.xlsx');
+}
+
+// ============ 手動輸入 ============
+function toggleManual() {
+  document.getElementById('manualSection').classList.toggle('hidden');
+}
+
+function submitManual() {
+  const data = {
+    si: parseFloat(document.getElementById('m_si').value) || 62.4,
+    al: parseFloat(document.getElementById('m_al').value) || 22.1,
+    fe: parseFloat(document.getElementById('m_fe').value) || 7.8,
+    k: parseFloat(document.getElementById('m_k').value) || 2.1,
+    ca: parseFloat(document.getElementById('m_ca').value) || 0.4,
+    rb: parseFloat(document.getElementById('m_rb').value) || 120,
+    sr: parseFloat(document.getElementById('m_sr').value) || 85,
+  };
+  startAnalysis(data);
+}
+
+// ============ 載入示例 ============
+function loadSample() {
+  const data = { si: 62.4, al: 22.1, fe: 7.8, k: 2.1, ca: 0.4, rb: 120, sr: 85 };
+  startAnalysis(data);
+}
+
+// ============ 處理文件 ============
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      const data = parseXRF(rows);
+      startAnalysis(data);
+    } catch (err) {
+      alert('文件解析失敗，請使用示例數據或手動輸入。');
+      console.error(err);
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+// ============ 解析 XRF 表格 ============
+function parseXRF(rows) {
+  const data = { si: null, al: null, fe: null, k: null, ca: null, rb: null, sr: null };
+  const map = {
+    'sio2': 'si', 'sio₂': 'si', 'si': 'si', '硅': 'si', '矽': 'si',
+    'al2o3': 'al', 'al₂o₃': 'al', 'al': 'al', '铝': 'al', '鋁': 'al',
+    'fe2o3': 'fe', 'fe₂o₃': 'fe', 'fe': 'fe', '铁': 'fe', '鐵': 'fe',
+    'k2o': 'k', 'k₂o': 'k', 'k': 'k', '钾': 'k', '鉀': 'k',
+    'cao': 'ca', 'ca': 'ca', '钙': 'ca', '鈣': 'ca',
+    'rb': 'rb', '铷': 'rb', '銣': 'rb',
+    'sr': 'sr', '锶': 'sr', '鍶': 'sr'
+  };
+  rows.forEach(row => {
+    if (!row || !row.length) return;
+    const key = String(row[0] || '').toLowerCase().replace(/\s/g, '');
+    const val = parseFloat(row[1]);
+    const mapped = map[key];
+    if (mapped && !isNaN(val)) data[mapped] = val;
+  });
+  return {
+    si: data.si ?? 62.4,
+    al: data.al ?? 22.1,
+    fe: data.fe ?? 7.8,
+    k: data.k ?? 2.1,
+    ca: data.ca ?? 0.4,
+    rb: data.rb ?? 120,
+    sr: data.sr ?? 85,
+  };
+}
+
+// ============ 開始解析動畫 ============
+function startAnalysis(data) {
+  currentData = data;
+  document.getElementById('uploadSection').classList.add('hidden');
+  document.getElementById('reportSection').classList.add('hidden');
+  document.getElementById('analyzingSection').classList.remove('hidden');
+
+  setStep(2);
+
+  const tasks = ['task1', 'task2', 'task3', 'task4', 'task5'];
+  const labels = ['讀取文件…', '識別元素欄位…', '計算特徵比值…', '比對參考數據庫…', '生成報告…'];
+  let progress = 0;
+  const progressFill = document.getElementById('analyzeProgress');
+
+  // 重置任務狀態
+  tasks.forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.innerHTML = '<span>○</span> ' + labels[i];
+    el.className = 'flex items-center gap-3 text-slate-400';
+  });
+  progressFill.style.width = '0%';
+
+  const interval = setInterval(() => {
+    progress += 20;
+    progressFill.style.width = progress + '%';
+    const idx = Math.floor(progress / 20) - 1;
+    if (idx >= 0 && idx < tasks.length) {
+      const el = document.getElementById(tasks[idx]);
+      el.innerHTML = '<span class="text-green-400">✅</span> ' + labels[idx];
+      el.className = 'flex items-center gap-3 text-white';
+    }
+    if (progress >= 100) {
+      clearInterval(interval);
+      setTimeout(showReport, 500);
+    }
+  }, 500);
+}
+
+// ============ 生成報告 ============
+function showReport() {
+  document.getElementById('analyzingSection').classList.add('hidden');
+  document.getElementById('reportSection').classList.remove('hidden');
+  setStep(3);
+
+  const d = currentData;
+
+  const now = new Date();
+  const rid = `HJ-${now.getFullYear()}-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`;
+  document.getElementById('reportId').textContent = rid.replace('HJ-', '');
+  document.getElementById('sampleId').textContent = rid;
+  document.getElementById('certId').textContent = rid;
+  document.getElementById('testDate').textContent = now.toISOString().slice(0, 10);
+  document.getElementById('certDate').textContent = now.toISOString().slice(0, 10);
+  document.getElementById('certFingerprint').textContent =
+    `Si ${d.si}% · Al ${d.al}% · Rb/Sr ${(d.rb / d.sr).toFixed(2)}`;
+
+  // 元素表
+  const elementRows = [
+    { name: 'SiO₂', val: d.si, range: '55–65%' },
+    { name: 'Al₂O₃', val: d.al, range: '18–25%' },
+    { name: 'Fe₂O₃', val: d.fe, range: '6–9%' },
+    { name: 'K₂O', val: d.k, range: '0.5–2.85%' },
+    { name: 'CaO', val: d.ca, range: '0.17–0.84%' },
+    { name: 'Rb', val: d.rb, range: '—', unit: 'ppm' },
+    { name: 'Sr', val: d.sr, range: '—', unit: 'ppm' },
+  ];
+  document.getElementById('elementTable').innerHTML = elementRows.map(r => {
+    const inRangeResult = checkRange(r.name, r.val);
+    const status = inRangeResult === true ? '<span class="badge badge-a">✅ 正常</span>' :
+                   inRangeResult === false ? '<span class="badge badge-c">⚠️ 偏離</span>' :
+                   '<span class="badge badge-b">—</span>';
+    const unit = r.unit || '%';
+    return `<tr>
+      <td class="text-white font-semibold">${r.name}</td>
+      <td class="text-goldBright font-bold">${r.val} ${unit}</td>
+      <td class="text-slate-400">${r.range}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  // 特徵比值表
+  const alSi = (d.al / d.si).toFixed(3);
+  const kCa = (d.k / d.ca).toFixed(2);
+  const rbSr = (d.rb / d.sr).toFixed(2);
+  const ratioRows = [
+    { name: 'Al₂O₃ / SiO₂', val: alSi, range: '0.32–0.38', note: inRange(alSi, 0.32, 0.38) ? '✅ 符合黃龍山原礦特徵' : '⚠️ 偏離參考區間' },
+    { name: 'K₂O / CaO', val: kCa, range: '內部數據庫比對', note: '⏳ 待數據庫接入' },
+    { name: 'Rb / Sr', val: rbSr, range: '礦層深度相關', note: '⏳ 待數據庫接入' },
+  ];
+  document.getElementById('ratioTable').innerHTML = ratioRows.map(r => `
+    <tr>
+      <td class="text-white font-semibold">${r.name}</td>
+      <td class="text-goldBright font-bold">${r.val}</td>
+      <td class="text-slate-400">${r.range}</td>
+      <td class="text-slate-300">${r.note}</td>
+    </tr>
+  `).join('');
+
+  // 產地概率（模擬）
+  const huanglong = 87.3, other = 9.8, foreign = 2.9;
+  document.getElementById('purityVal').textContent = '82%';
+  document.getElementById('typicalVal').textContent = '76%';
+  document.getElementById('gradeVal').textContent = 'A 級';
+
+  // 繪製產地圖
+  setTimeout(() => {
+    const chartDom = document.getElementById('originChart');
+    if (!chartDom) return;
+    // 若已有實例，先銷毀
+    const existing = echarts.getInstanceByDom(chartDom);
+    if (existing) existing.dispose();
+    const chart = echarts.init(chartDom);
+    chart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      grid: { left: '3%', right: '6%', bottom: '3%', top: '6%', containLabel: true },
+      xAxis: {
+        type: 'value',
+        max: 100,
+        axisLabel: { color: '#94a3b8', formatter: '{value}%' },
+        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } }
+      },
+      yAxis: {
+        type: 'category',
+        data: ['外山泥', '宜興其他礦區', '宜興黃龍山'],
+        axisLabel: { color: '#e2e8f0', fontSize: 14, fontWeight: 600 },
+        axisLine: { lineStyle: { color: 'rgba(212,160,23,0.3)' } }
+      },
+      series: [{
+        type: 'bar',
+        data: [
+          { value: foreign, itemStyle: { color: '#64748b' } },
+          { value: other, itemStyle: { color: '#4A90D9' } },
+          { value: huanglong, itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+            colorStops: [{ offset: 0, color: '#B8860B' }, { offset: 1, color: '#FFD966' }] } } }
+        ],
+        barWidth: 28,
+        label: {
+          show: true, position: 'right',
+          formatter: '{c}%', color: '#FFD966', fontWeight: 700, fontSize: 14
+        },
+        itemStyle: { borderRadius: [0, 8, 8, 0] }
+      }]
+    });
+  }, 100);
+}
+
+// ============ 範圍檢查 ============
+function checkRange(name, val) {
+  const ranges = {
+    'SiO₂': [55, 65],
+    'Al₂O₃': [18, 25],
+    'Fe₂O₃': [6, 9],
+    'K₂O': [0.5, 2.85],
+    'CaO': [0.17, 0.84],
+  };
+  if (!ranges[name]) return null;
+  const [min, max] = ranges[name];
+  return val >= min && val <= max;
+}
+function inRange(val, min, max) {
+  const v = parseFloat(val);
+  return v >= min && v <= max;
+}
+
+// ============ 步驟指示 ============
+function setStep(n) {
+  for (let i = 1; i <= 3; i++) {
+    const dot = document.getElementById('stepDot' + i);
+    const label = document.getElementById('stepLabel' + i);
+    dot.className = 'step-dot ' + (i < n ? 'step-done' : i === n ? 'step-active' : 'step-idle');
+    if (label) label.className = 'text-sm font-semibold ' + (i === n ? 'text-white' : 'text-slate-400');
+  }
+}
+
+// ============ 重置 ============
+function resetDemo() {
+  document.getElementById('reportSection').classList.add('hidden');
+  document.getElementById('analyzingSection').classList.add('hidden');
+  document.getElementById('uploadSection').classList.remove('hidden');
+  document.getElementById('analyzeProgress').style.width = '0%';
+  const labels = ['讀取文件…', '識別元素欄位…', '計算特徵比值…', '比對參考數據庫…', '生成報告…'];
+  ['task1','task2','task3','task4','task5'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.innerHTML = '<span>○</span> ' + labels[i];
+    el.className = 'flex items-center gap-3 text-slate-400';
+  });
+  fileInput.value = '';
+  setStep(1);
+}
+
+// ============ 下載 PDF ============
+async function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const report = document.getElementById('reportBody');
+  const canvas = await html2canvas(report, {
+    backgroundColor: '#0F2A44',
+    scale: 2,
+    useCORS: true,
+  });
+  const imgData = canvas.toDataURL('image/png');
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const imgW = pageW;
+  const imgH = (canvas.height * imgW) / canvas.width;
+
+  let heightLeft = imgH;
+  let position = 0;
+
+  pdf.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+  heightLeft -= pageH;
+
+  while (heightLeft > 0) {
+    position = heightLeft - imgH;
+    pdf.addPage();
+    pdf.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+    heightLeft -= pageH;
+  }
+
+  pdf.save(`XRF_Report_${document.getElementById('reportId').textContent}.pdf`);
+}
+
+// ============ 滾動淡入 ============
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.style.animationPlayState = 'running';
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.slide-up').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
